@@ -358,7 +358,7 @@ void test(void *pvParameters)
 //хннЯ1
 void task1(void * pvParameters)
 {
-	vTaskDelete(NULL);
+	//vTaskDelete(NULL);
 	int i = 0;
 	for(;;)
 	{
