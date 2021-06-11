@@ -72,6 +72,10 @@ TaskHandle_t TASK4_Handler;
 //任务函数
 void task4(void *pvParameters);
 
+#define EVENTBIT_0	(1<<0)				//事件位
+#define EVENTBIT_1	(1<<1)
+#define EVENTBIT_2	(1<<2)
+#define EVENTBIT_ALL	(EVENTBIT_0|EVENTBIT_1|EVENTBIT_2)
 
 int main(void)
 {
@@ -80,7 +84,7 @@ int main(void)
 	Delay_Init();
 	Led_Init();
 	Usart1_Init(115200);
-	allKey_EXTI_Init();
+	AllKeyInit();
 	
 	xTaskCreate((TaskFunction_t )start_task,            //任务函数
 							(const char*    )"start_task",          //任务名称
@@ -94,79 +98,6 @@ int main(void)
 	//return 0;
 }
 
-//FreeRTOS的信号量:SemaphoreHandle_t
-//释放（+1操作） ——>  二值信号量有效/队列满
-//获取（-1操作） ——>  二值信号量无效/队列空
-//
-//
-//
-//////////////////////////////////////二值信号量创建函数///////////////////////////////////
-//函数原型：SemaphoreHandle_t xSemaphoreCreateBinary()；
-//参数：无
-//返回值：NULL，创建失败；二值信号量句柄，创建成功
-//备注：动态方法创建。新版函数。创建的信号量是无效的。此函数本质是调用xQueueGenericCreate函数创建一个长度为1的队列。
-//
-//
-//函数原型：void vSemaphoreCreateBinary(SemaphoreHandle_t xSemaphore);
-//参数：
-//xSemaphore：信号量句柄，创建成功；NULL，创建失败
-//返回值：无
-//备注：动态方法创建。旧版函数。创建的信号量是有效的。此函数本质是调用xQueueGenericCreate函数创建一个长度为1的队列。
-//
-//
-//函数原型：SemaphoreHandle_t xSemaphoreCreateBinaryStatic(StaticSemaphore_t * pxSemaphoreBuffer)
-//参数:
-//pxSemaphoreBuffer：用来保存指向StaticSemaphore_t类型的指针，用来保存信号量结构体
-//返回值：无
-//备注：静态方法创建信号量。此函数本质是调用xQueueGenericCreate函数创建一个长度为1的队列
-///////////////////////////////////////////////////////////////////////////////////////////
-
-
-////////////////////////////////////二值信号量的获取////////////////////////////////////////
-//函数原型：BaseType_t xSemaphoreTake(SemaphoreHandle_t xSemaphore,TickType_t xBlockTime)
-//参数：
-//xSemaphore：要获取的信号量句柄
-//xBlockTime：阻塞时间
-//返回值：pdTRUE，获取成功；pdFALSE，获取失败
-//备注：
-//关于阻塞时间：单位是系统的最小节拍。设置为0，如果队空（无效）则直接跳过；设置为portMAX_DELAY，如果队空，任务则进入延时列表（阻塞）。
-//此函数的本质是调用XQueueGenericReceive()函数，对队列进行读取和减1操作。
-//此函数可用于二值信号量、计数型信号量、互斥信号量。
-//
-//
-//函数原型：BaseType_t xSemaphoreTakeFromISR(SemaphoreHandle_t xSemaphore,BaseType_t * pxHigherPriorityTaskWoken)
-//参数：
-//xSemaphore：要获取的信号量句柄
-//pxHigherPriorityTaskWoken：标记退出此函数后是否进行任务切换。当此值为pdTRUE的时候，在退出中断服务函数之前一定要进行一次任务切换。
-//返回值：pdTRUE，获取信号量成功；pdFALSE，获取信号量失败
-//备注：
-//该函数用于中断中获取信号量。
-//本质是调用中断级出队函数xQueueReceiveFromISR(),
-//不产生阻塞，如果队空则直接跳出
-//////////////////////////////////////////////////////////////////////////////////////////////
-
-///////////////////////////////////二值信号量的释放//////////////////////////////////////////
-//函数原型：BaseType_t xSemaphoreGive(SemaphoreHandle_t xSemaphore)
-//参数：
-//xSemaphore:要释放的信号量句柄
-//返回值：pdPASS,释放信号量成功；errQUEUE_FULL,释放信号量失败
-//备注：
-//关于阻塞时间：该函数的阻塞时间由semGIVE_BLOCK_TIME决定，默认值为0，意味着如果队列满则直接跳过
-//关键调用函数为xQueueGenericSend()，因此释放操作=入队操作
-//该函数可用于二值信号量，计数型信号量，互斥信号量
-//
-//
-//函数原型：BaseType_t xSemaphoreGiveFromISR(SemaphoreHandle_t xSemaphore,BaseType_t * pxHigherPriorityTaskWoken)
-//参数：
-//xSemaphore:要释放的信号量句柄
-//pxHigherPriorityTaskWoken：标记退出此函数后是否进行任务切换。当此值为pdTRUE的时候，在退出中断服务函数之前一定要进行一次任务切换。
-//返回值：pdPASS,释放信号量成功；errQUEUE_FULL,释放信号量失败
-//备注：
-//此函数用在中断中释放信号量
-//此函数本质使用xQueueGiveFromISR()进行入队操作，此函数与xQueueGenericSendFromISR()类似。
-//本函数不能用于互斥信号量的释放操作
-//不会产生阻塞，如果队满则直接跳过
-//////////////////////////////////////////////////////////////////////////////
 
 //开始任务任务函数
 void start_task(void *pvParameters)
@@ -257,6 +188,7 @@ void task1(void * pvParameters)
 		
 	}
 }
+
 //任务2
 void task2(void * pvParameters)
 {
@@ -284,6 +216,9 @@ void task3(void *pvParameters)
 	//vTaskDelete(NULL);
 	BaseType_t err;
 	u32 TaskNotifyValue;
+	u8 eventvalue;
+	static u8 event0flag,event1flag,event2flag;
+	
 	for(;;)
 	{
 		err = xTaskNotifyWait((uint32_t 	)0x00,							//进入此函数时不清空本任务的通知值
@@ -291,20 +226,27 @@ void task3(void *pvParameters)
 													(uint32_t*  )&TaskNotifyValue,	//保存接收到的通知值
 													(TickType_t	)portMAX_DELAY);		//在接收到通知之前阻塞
 		
+		printf("task3:接收到通知值%d\r\n",TaskNotifyValue);
 		if(err == pdFALSE)
 		{
-			printf("task4:通知接收失败\r\n");
+			printf("task3:通知接收失败\r\n");
 		}
 		else{								//获取通知值成功
-			switch(TaskNotifyValue)
+			if((TaskNotifyValue & EVENTBIT_0) != 0)					//事件0
 			{
-				case KEY0_PRESD:
-					printf("task4:按键0被按下\r\n");
-					break;
-				case KEY1_PRESD:
-					printf("task4:按键1被按下\r\n");
-					break;
+				event0flag = 1;
 			}
+			else if((TaskNotifyValue & EVENTBIT_1) != 0)		//事件1
+			{
+				event1flag = 1;
+			}
+			else if((TaskNotifyValue & EVENTBIT_2) != 0)		//事件2
+			{
+				event2flag = 1;
+			}
+			eventvalue = event0flag|(event1flag<<1)|(event2flag<<2);
+			
+			printf("task3:任务通知值%d\r\n",eventvalue);
 		}
 
 	}
@@ -322,17 +264,27 @@ void task4(void *pvParameters)
 	
 	while(1)
 	{
-		key = KEY_Scan(0);
 		
-		if((TASK3_Handler != NULL) && key)
+		if(TASK3_Handler != NULL)
 		{
-			err = xTaskNotify( (TaskHandle_t	) TASK3_Handler,
-												 (uint32_t			) key,
-												 (eNotifyAction	) eSetValueWithOverwrite);
-			if(err == pdFALSE)
+			key = KEY_Scan(0);
+			switch(key)
 			{
-				printf("task4:任务通知发送失败\r\n");
+				case KEY0_PRESD:
+					err = xTaskNotify( (TaskHandle_t	) TASK3_Handler,
+											 (uint32_t			) EVENTBIT_1,
+											 (eNotifyAction	) eSetBits);
+					break;
+				case KEY1_PRESD:
+					err = xTaskNotify( (TaskHandle_t	) TASK3_Handler,
+											 (uint32_t			) EVENTBIT_2,
+											 (eNotifyAction	) eSetBits);
+					break;
 			}
+			
+			if(err == pdFALSE)
+				printf("task4:任务通知发送失败\r\n");
+
 		}
 		
 		F_delay_ms(10);
